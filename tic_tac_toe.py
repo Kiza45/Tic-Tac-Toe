@@ -19,7 +19,7 @@ DEFAULT_PLAYERS = (
 )
 
 class game_logic:
-    def __inti__(self, players=DEFAULT_PLAYERS, board_size=BOARD_SIZE):
+    def __init__(self, players=DEFAULT_PLAYERS, board_size=BOARD_SIZE):
         self._players = cycle(players)
         self.board_size = board_size
         self.current_player = next(self._players)
@@ -29,59 +29,68 @@ class game_logic:
         self._winning_combos = []
         self._setup_board()
 
-        def _setup_board(self):
-            self._current_moves = [
-                [Move(row, col) for col in range(self.board_size)]
-                for row in range(self.board_size)
-            ]
-            self._winning_combos = self._get_winning_combos()
+    def _setup_board(self):
+        self._current_moves = [
+            [Move(row, col) for col in range(self.board_size)]
+            for row in range(self.board_size)
+        ]
+        self._winning_combos = self._get_winning_combos()
 
-        def _get_winning_combos(self):
-            rows = [
-                [(move.row, move.col) for move in row]
-                for row in self._current_moves
-            ]
-            columns = [list(col) for col in zip(*rows)]
-            first_diagonal =[row[i] for i, row in enumerate(rows)]
-            second_diagonal = [col[i] for i, col in enumerate(reversed(columns))]
-            return rows + columns + [first_diagonal, second_diagonal]
+    def _get_winning_combos(self):
+        rows = [
+            [(move.row, move.col) for move in row]
+            for row in self._current_moves
+        ]
+        columns = [list(col) for col in zip(*rows)]
+        first_diagonal =[row[i] for i, row in enumerate(rows)]
+        second_diagonal = [col[i] for i, col in enumerate(reversed(columns))]
+        return rows + columns + [first_diagonal, second_diagonal]
 
-        def is_valid_move(self, move):
-            row, col = move.row, move.col
-            move_was_not_played = self. _current_moved[row][col].label == ""
-            no_winner = not self._has_wineer
+    def is_valid_move(self, move):
+        row, col = move.row, move.col
+        move_was_not_played = self. _current_moves[row][col].label == ""
+        no_winner = not self._has_winner
+        return no_winner and move_was_not_played
+
+    def process_move(self, move):
+        row, col = move.row, move.col
+        self._current_moves[row][col] = move
+        for combo in self._winning_combos:
+            results = set(
+                self._current_moves[n][m].label
+                for n,m in combo
+            )
+            is_win = (len(results)==1) and ("" not in results)
+            if is_win:
+                self._has_winner = True
+                self.winner_combo = combo
+                break
     
-        def process_move():
-            row, col = move.row, move.col
-            self._current_moves[row][col] = move
-            for combo in self._winning_combos:
-                results = set(
-                    self._current_moves[n][m].label
-                    for n,m in combo
-                )
-                is_win = (len(results)==1) and ("" not in results)
-                if is_win:
-                    self._has_winner = True
-                    self.winner_combo = combo
-                    break
-        
-        def has_winner(self):
-            return self._has_winner
-        
-        def it_tied(self):
-            no_winner = not self._has_winner
-            played_moves = (move.label for row in self._current_moves for move in row)
-            return no_winner and all(played_moves)
-        
-        def toggle_players(self):
-            self.current_player = next(self._players)
-        
+    def has_winner(self):
+        return self._has_winner
+    
+    def is_tied(self):
+        no_winner = not self._has_winner
+        played_moves = (move.label for row in self._current_moves for move in row)
+        return no_winner and all(played_moves)
+    
+    def toggle_players(self):
+        self.current_player = next(self._players)
+
+    def reset_game(self):
+        for row, row_content in enumerate(self._current_moves):
+            for col, _ in enumerate(row_content):
+                row_content[col] = Move(row,col)
+        self._has_winner = False
+        self.winner_combo=[]
+    
 class game_board(tk.Tk):
     def __init__(self, game):
         super().__init__()
         self.title("Tic Tac Toe")
         self._cells = {}
         self._game = game
+        self.create_menu()
         self.create_game_board()
         self.create_board_grid()
 
@@ -113,6 +122,7 @@ class game_board(tk.Tk):
                     highlightbackground ="lightblue",
                 )
                 self._cells[button] = (row, col)
+                button.bind("<ButtonPress-1>", self.play)
                 button.grid(
                     row=row,
                     column=col,
@@ -120,10 +130,63 @@ class game_board(tk.Tk):
                     pady=5,
                     sticky="nsew"
                 )
+    
+    def play(self, event):
+        clicked_button = event.widget
+        row, col = self._cells[clicked_button]
+        move = Move(row, col, self._game.current_player.label)
+        if self._game.is_valid_move(move):
+            self.update_button(clicked_button)
+            self._game.process_move(move)
+            if self._game.is_tied():
+                self.update_display(msg="Tied game!", color="red")
+            elif self._game.has_winner():
+                self.highlight_cells()
+                msg = f'player"{self._game.current_player.label}" won!'
+                color = self._game.current_player.color
+                self.update_display(msg, color)
+            else:
+                self._game.toggle_players()
+                msg = f"{self._game.current_player.label}'s turn!"
+                self.update_display(msg)
+    
+    def update_button(self, clicked_button):
+        clicked_button.config(text=self._game.current_player.label)
+        clicked_button.config(fg=self._game.current_player.color)
+    
+    def update_display(self, msg, color="black"):
+        self.display["text"] = msg
+        self.display["fg"] = color
 
+
+    def highlight_cells(self):
+        for button, coordinates in self._cells.items():
+            if coordinates in self._game.winner_combo:
+                button.config(highlightbackground="red")
+
+    def create_menu(self):
+        menu_bar = tk.Menu(master=self)
+        self.config(menu = menu_bar)
+        file_menu = tk.Menu(master=menu_bar)
+        file_menu.add_command(
+            label = "Play Again",
+            command=self.reset_board
+        )
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=quit)
+        menu_bar.add_cascade(label="File", menu=file_menu)
+
+    def reset_board(self):
+        self._game.reset_game()
+        self.update_display(msg="Ready?")
+        for button in self._cells.keys():
+            button.config(highlightbackground="lightblue")
+            button.config(text="")
+            button.config(fg="black")
 
 def main():
-    board= game_board()
+    game=game_logic()
+    board= game_board(game)
     board.mainloop()
 
 if __name__ == "__main__":
